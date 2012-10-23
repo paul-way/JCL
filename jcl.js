@@ -1,13 +1,11 @@
 
 /*
     jcl.js
-    2012-6-27
+    2012-10-22
 
     JavaScript CRM Library
 
     Author: Paul Way (www.paul-way.com)    
-
-    Public Domain.
 
     NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.    
 
@@ -18,11 +16,12 @@
 	 2012-07-19     Added the ability to update and publish a web resource.  Added
 	                the Base64 Encoding (required bitwise on JSLint).
 
+	 2012-10-22     Added cross browser support for the FetchXML parsing (as well as IE 10)
 
 */
 
 /*jslint browser: true, nomen: true, newcap: true, sloppy:true, plusplus:true, bitwise: true */
-/*global ActiveXObject, alert, CrmEncodeDecode, GetGlobalContext, ORG_UNIQUE_NAME, Xrm */
+/*global ActiveXObject, alert, CrmEncodeDecode, DOMParser, GetGlobalContext, ORG_UNIQUE_NAME, Xrm */
 
 var JCL;
 if (!JCL) {
@@ -61,7 +60,7 @@ if (!JCL) {
 
 		var xmlReturn, results, sFetchResult, resultDoc, i, j, k, l,
 			oResultNode, jDE, obj, attr, sKey, sType, foVal,
-			entOSV, entRef, entCV;
+			entOSV, entRef, entCV, parser, recordCount, xmlLabel, xmlValue;
 
 		///<summary>(private) Fetch message callback.</summary>
 		//xmlhttp must be completed
@@ -80,34 +79,51 @@ if (!JCL) {
 
 		// results = xmlReturn;
 
-	    sFetchResult = xmlhttp.responseXML.selectSingleNode("//a:Entities").xml;
+		if (window.DOMParser) {
+			// IE 9/10, Chrome, Firefox & Safari
+			parser = new DOMParser();
+			resultDoc = parser.parseFromString(xmlhttp.responseText, "text/xml");
+			resultDoc = resultDoc.getElementsByTagName("a:Entities")[0];
 
-	    resultDoc = new ActiveXObject("Microsoft.XMLDOM");
-	    resultDoc.async = false;
-	    resultDoc.loadXML(sFetchResult);
+			xmlLabel = "localName";
+			xmlValue = "textContent";
+		} else {
+			// IE 8 and below
+		    sFetchResult = xmlhttp.responseXML.selectSingleNode("//a:Entities").xml;
+
+		    resultDoc = new ActiveXObject("Microsoft.XMLDOM");
+		    resultDoc.async = false;
+		    resultDoc.loadXML(sFetchResult);
+		    resultDoc = resultDoc.firstChild;
+
+		    xmlLabel = "baseName";
+		    xmlValue = "text";
+		}
 
 	    //parse result xml into array of jsDynamicEntity objects
-	    results = new Array(resultDoc.firstChild.childNodes.length);
-	    for (i = 0; i < resultDoc.firstChild.childNodes.length; i++) {
-	        oResultNode = resultDoc.firstChild.childNodes[i];
+	    recordCount = resultDoc.childNodes.length;
+	    results = []; //new Array(recordCount);
+
+	    for (i = 0; i < recordCount; i++) {
+	        oResultNode = resultDoc.childNodes[i];
 	        jDE = new JCL._DynamicEntity();
 	        obj = {};
 
 	        for (j = 0; j < oResultNode.childNodes.length; j++) {
-	            switch (oResultNode.childNodes[j].baseName) {
+	            switch (oResultNode.childNodes[j][xmlLabel]) {
 	            case "Attributes":
 	                attr = oResultNode.childNodes[j];
 
 	                for (k = 0; k < attr.childNodes.length; k++) {
 
 	                    // Establish the Key for the Attribute 
-	                    sKey = attr.childNodes[k].firstChild.text;
+	                    sKey = attr.childNodes[k].firstChild[xmlValue];
 	                    sType = '';
 
 	                    // Determine the Type of Attribute value we should expect 
 	                    for (l = 0; l < attr.childNodes[k].childNodes[1].attributes.length; l++) {
-	                        if (attr.childNodes[k].childNodes[1].attributes[l].baseName === 'type') {
-	                            sType = attr.childNodes[k].childNodes[1].attributes[l].text;
+	                        if (attr.childNodes[k].childNodes[1].attributes[l][xmlLabel] === 'type') {
+	                            sType = attr.childNodes[k].childNodes[1].attributes[l][xmlValue];
 	                        }
 	                    }
 
@@ -115,23 +131,23 @@ if (!JCL) {
 	                    case "a:OptionSetValue":
 	                        entOSV = new JCL._OptionSetValue();
 	                        entOSV.type = sType;
-	                        entOSV.value = attr.childNodes[k].childNodes[1].text;
+	                        entOSV.value = attr.childNodes[k].childNodes[1][xmlValue];
 	                        obj[sKey] = entOSV;
 	                        break;
 
 	                    case "a:EntityReference":
 	                        entRef = new JCL._EntityReference();
 	                        entRef.type = sType;
-	                        entRef.guid = attr.childNodes[k].childNodes[1].childNodes[0].text;
-	                        entRef.logicalName = attr.childNodes[k].childNodes[1].childNodes[1].text;
-	                        entRef.name = attr.childNodes[k].childNodes[1].childNodes[2].text;
+	                        entRef.guid = attr.childNodes[k].childNodes[1].childNodes[0][xmlValue];
+	                        entRef.logicalName = attr.childNodes[k].childNodes[1].childNodes[1][xmlValue];
+	                        entRef.name = attr.childNodes[k].childNodes[1].childNodes[2][xmlValue];
 	                        obj[sKey] = entRef;
 	                        break;
 
 	                    default:
 	                        entCV = new JCL._CrmValue();
 	                        entCV.type = sType;
-	                        entCV.value = attr.childNodes[k].childNodes[1].text;
+	                        entCV.value = attr.childNodes[k].childNodes[1][xmlValue];
 	                        obj[sKey] = entCV;
 
 	                        break;
@@ -143,11 +159,11 @@ if (!JCL) {
 	                break;
 
 	            case "Id":
-	                jDE.guid = oResultNode.childNodes[j].text;
+	                jDE.guid = oResultNode.childNodes[j][xmlValue];
 	                break;
 
 	            case "LogicalName":
-	                jDE.logicalName = oResultNode.childNodes[j].text;
+	                jDE.logicalName = oResultNode.childNodes[j][xmlValue];
 	                break;
 
 	            case "FormattedValues":
@@ -155,11 +171,9 @@ if (!JCL) {
 
 	                for (k = 0; k < foVal.childNodes.length; k++) {
 	                    // Establish the Key, we are going to fill in the formatted value of the already found attribute 
-	                    sKey = foVal.childNodes[k].firstChild.text;
+	                    sKey = foVal.childNodes[k].firstChild[xmlValue];
 
-	                    jDE.attributes[sKey].formattedValue = foVal.childNodes[k].childNodes[1].text;
-
-
+	                    jDE.attributes[sKey].formattedValue = foVal.childNodes[k].childNodes[1][xmlValue];
 	                }
 	                break;
 	            }
@@ -437,6 +451,25 @@ if (!JCL) {
 		request += '</s:Body></s:Envelope>';
 
 		return JCL._ExecuteRequest(request, "Execute", JCL._GenericCallback, fCallback);
+	};
+
+	JCL.RemoveParams = function (guid) {
+		guid = guid.replace('%7b', '').replace('%7d', '');
+		return guid;
+	};
+
+	JCL.GetUrlParameter = function (name) {
+		name = name.replace(/[\[]/, "\\\[").replace(/[\]]/, "\\\]");
+
+		var regexS = "[\\?&]" + name + "=([^&#]*)",
+			regex = new RegExp(regexS),
+			results = regex.exec(window.location.href);
+
+		if (results === null) {
+			return "";
+		} else {
+			return results[1];
+		}
 	};
 
 	JCL._Base64Encode = function (data) {
