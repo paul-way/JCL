@@ -5,18 +5,19 @@
 
     JavaScript CRM Library
 
-    Author: Paul Way (www.paul-way.com)    
+    Author: Paul Way [www.CustomerEffective.com (work) | www.paul-way.com (play) | @paul_way (twitter)]
 
     NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.    
 
 	Updates:
 
 	    Date        Description         
-	------------ | ----------------------------------------------------------------
+	------------ | ------------------------------------------------------------------
+	 2012-10-22     Added cross browser support for the FetchXML parsing (as well as 
+	 				IE 10)
+
 	 2012-07-19     Added the ability to update and publish a web resource.  Added
 	                the Base64 Encoding (required bitwise on JSLint).
-
-	 2012-10-22     Added cross browser support for the FetchXML parsing (as well as IE 10)
 
 */
 
@@ -72,12 +73,6 @@ if (!JCL) {
 		if (JCL._HandleErrors(xmlhttp)) {
 			return;
 		}
-
-		// xmlReturn = xmlhttp.responseXML.xml;
-		// xmlReturn = xmlReturn.replace(/</g, '&lt;');
-		// xmlReturn = xmlReturn.replace(/>/g, '&gt;');
-
-		// results = xmlReturn;
 
 		if (window.DOMParser) {
 			// IE 9/10, Chrome, Firefox & Safari
@@ -222,7 +217,7 @@ if (!JCL) {
 
 		//return entities
 		if (callback !== null) {
-			callback(true); //results);
+			callback(true);
 		} else {
 			return true;
 		}
@@ -239,15 +234,14 @@ if (!JCL) {
 		xmlhttp.setRequestHeader("SOAPAction", "http://schemas.microsoft.com/xrm/2011/Contracts/Services/IOrganizationService/" + sMessage);
 
 		if (fUserCallback !== null) {
-			//asynchronous: register callback function, then send the request.
-			//var crmServiceObject = this;
+			// asynchronous: register callback function, then send the request.
 			xmlhttp.onreadystatechange = function () {
 				fInternalCallback.call(this, xmlhttp, fUserCallback);
 			};
 
 			xmlhttp.send(sXml);
 		} else {
-			//synchronous: send request, then call the callback function directly
+			// synchronous: send request, then call the callback function directly
 			xmlhttp.send(sXml);
 			return fInternalCallback.call(this, xmlhttp, null);
 		}
