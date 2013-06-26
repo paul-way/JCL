@@ -1,23 +1,23 @@
 
 /*
-    jcl.js
-    2012-10-22
+jcl.js
+2012-10-22
 
-    JavaScript CRM Library
+JavaScript CRM Library
 
-    Author: Paul Way [www.CustomerEffective.com (work) | www.paul-way.com (play) | @paul_way (twitter)]
+Author: Paul Way [www.CustomerEffective.com (work) | www.paul-way.com (play) | @paul_way (twitter)]
 
-    NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.    
+NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.    
 
-	Updates:
+Updates:
 
-	    Date        Description         
-	------------ | ------------------------------------------------------------------
-	 2012-10-22     Added cross browser support for the FetchXML parsing (as well as 
-	 				IE 10)
+    Date        Description         
+------------ | ------------------------------------------------------------------
+ 2012-10-22     Added cross browser support for the FetchXML parsing (as well as 
+                IE 10)
 
-	 2012-07-19     Added the ability to update and publish a web resource.  Added
-	                the Base64 Encoding (required bitwise on JSLint).
+ 2012-07-19     Added the ability to update and publish a web resource.  Added
+                the Base64 Encoding (required bitwise on JSLint).
 
 */
 
@@ -26,12 +26,11 @@
 
 var JCL;
 if (!JCL) {
-	JCL = {};
+    JCL = {};
 }
 
 (function () {
-
-	JCL.XMLHTTPSUCCESS = 200;
+ 	JCL.XMLHTTPSUCCESS = 200;
 	JCL.XMLHTTPREADY = 4;
 
 	// Set the context
@@ -78,7 +77,14 @@ if (!JCL) {
 			// IE 9/10, Chrome, Firefox & Safari
 			parser = new DOMParser();
 			resultDoc = parser.parseFromString(xmlhttp.responseText, "text/xml");
-			resultDoc = resultDoc.getElementsByTagName("a:Entities")[0];
+			
+			if (resultDoc.getElementsByTagName("a:Entities").length > 0) {
+				// IE 9/10
+				resultDoc = resultDoc.getElementsByTagName("a:Entities")[0];
+			} else {
+				// Webkit
+				resultDoc = resultDoc.getElementsByTagName("Entities")[0];
+			}
 
 			xmlLabel = "localName";
 			xmlValue = "textContent";
@@ -178,7 +184,6 @@ if (!JCL) {
 	        results[i] = jDE;
 	    }
 
-
 		//return entities
 		if (callback !== null) {
 			callback(results);
@@ -216,7 +221,7 @@ if (!JCL) {
 		}
 
 		//return entities
-		if (callback !== null) {
+		if (callback !== null ) {
 			callback(true);
 		} else {
 			return true;
@@ -277,6 +282,12 @@ if (!JCL) {
 
 		request += '</s:Body></s:Envelope>';
 
+		// To execute synchronously, the calling function should pass null.
+		//   This allows the user to pass nothing for a callback to execute synchronously
+		if (typeof fCallback === 'undefined') {
+			fCallback = null;
+		}
+
 		return JCL._ExecuteRequest(request, "Execute", JCL._FetchCallback, fCallback);
 	};
 
@@ -325,42 +336,77 @@ if (!JCL) {
 		}
 
 		var myList = [],
-			resultDoc = new ActiveXObject("Microsoft.XMLDOM"),
-			entList = resultDoc.getElementsByTagName("c:EntityMetadata"),
+			resultDoc,
+			entList, // = resultDoc.getElementsByTagName("c:EntityMetadata"),
 			i = 0,
 			j = 0,
 			k = 0,
 			entRef,
 			attrCount,
-			sBase;
+			sBase,
+			xmlLabel = 'baseName',
+			xmlValue = 'text';
 
-		resultDoc.async = false;
-		resultDoc.loadXML(xmlhttp.responseXML.xml);
+		if (window.DOMParser) {
+			//console.log('ie 9/10');
+			// IE 9/10, Chrome, Firefox & Safari
+			parser = new DOMParser();
+			resultDoc = parser.parseFromString(xmlhttp.responseText, "text/xml");
+			//console.log('built result doc');
+
+			entList = resultDoc.getElementsByTagName("c:EntityMetadata");
+
+			if (entList.length === 0) {
+    			entList = resultDoc.getElementsByTagName("EntityMetadata")
+			}
+
+			//console.log('built entity list: ' + entList.length);
+			
+			xmlLabel = "localName";
+			xmlValue = "textContent";
+		} else {
+			// IE 8 and below
+		    resultDoc = new ActiveXObject("Microsoft.XMLDOM");
+		    resultDoc.async = false;
+		    resultDoc.loadXML(xmlhttp.responseXML.xml);
+		    entList = resultDoc.getElementsByTagName("c:EntityMetadata");
+		    //resultDoc = resultDoc.firstChild;
+
+		    //xmlLabel = "baseName";
+		    //xmlValue = "text";
+		}
+
+		//resultDoc.async = false;
+		//resultDoc.loadXML(xmlhttp.responseXML.xml);
 
 		for (i = 0; i < entList.length; i++) {
 			entRef = new JCL._EntityReference();
 			attrCount = entList[i].childNodes.length;
+			//console.log("Attributes: " + attrCount);
 
 			for (j = 0; j < attrCount; j++) {
-				sBase = entList[i].childNodes[j].baseName;
+				sBase = entList[i].childNodes[j][xmlLabel];
 
 				if (sBase === "MetadataId") {
-					entRef.guid = entList[i].childNodes[j].text;
+					entRef.guid = entList[i].childNodes[j][xmlValue];
 				}
 
 				if (sBase === "LogicalName") {
-					entRef.logicalName = entList[i].childNodes[j].text;
+					entRef.logicalName = entList[i].childNodes[j][xmlValue];
 				}
 
 				if (sBase === "ObjectTypeCode") {
-					entRef.objectTypeCode = entList[i].childNodes[j].text;
+					entRef.objectTypeCode = entList[i].childNodes[j][xmlValue];
 				}
 
 				if (sBase === "DisplayCollectionName") {
 					try {
-						if (entList[i].childNodes[j].text !== "") {
-							entRef.PluralName = entList[i].childNodes[j].childNodes[1].childNodes[1].text;
-						}
+						// if (entList[i].childNodes[j][xmlValue] !== "") {
+						// 	entRef.PluralName = entList[i].childNodes[j].childNodes[1].childNodes[1][xmlValue];
+						// }
+						if (entList[i].childNodes[j].childNodes[1].childNodes.length === 5) {
+							entRef.PluralName = entList[i].childNodes[j].childNodes[1].childNodes[3][xmlValue];
+						}						
 					} catch (e1) {
 						entRef.PluralName = "";
 					}
@@ -368,8 +414,9 @@ if (!JCL) {
 
 				if (sBase === "DisplayName") {
 					try {
-						if (entList[i].childNodes[j].text !== "") {
-							entRef.DisplayName = entList[i].childNodes[j].childNodes[1].childNodes[1].text;
+						if (entList[i].childNodes[j].childNodes[1].childNodes.length === 5) {
+							//console.log(entList[i].childNodes[j].childNodes[1].childNodes[3][xmlValue]);
+							entRef.DisplayName = entList[i].childNodes[j].childNodes[1].childNodes[3][xmlValue];
 						}
 					} catch (e2) {
 						entRef.DisplayName = "";
@@ -392,6 +439,35 @@ if (!JCL) {
 			return myList;
 		}
 
+	};
+
+	JCL.GetSystemViews = function (entityTypeCode) {
+		'use strict';
+
+		var fetch = " " +
+			"<fetch count='50' mapping='logical' version='1.0'>" +
+			"	<entity name='savedquery'>" +
+			"		<attribute name='description' />" +
+			"		<attribute name='fetchxml' />" +
+			"		<attribute name='isdefault' />" +
+			"		<attribute name='layoutxml' />" +
+			"		<attribute name='name' />" +
+			"		<attribute name='organizationid' />" +
+			"		<attribute name='queryapi' />" +
+			"		<attribute name='querytype' />" +
+			"		<attribute name='returnedtypecode' />" +
+			"		<attribute name='savedqueryid' />" +
+			"		<attribute name='savedqueryidunique' />" +
+			"		<order attribute='name' />" +
+			"		<filter>" +
+			"			<condition attribute='returnedtypecode' operator='eq' value='" + entityTypeCode + "' />" +
+			"			<condition attribute='querytype' operator='eq' value='0' />" +
+			"			<condition attribute='fetchxml' operator='not-null' />" +
+			"		</filter>" +
+			"	</entity>" +
+			"</fetch>";
+
+		return JCL.Fetch(fetch);
 	};
 
 	JCL.UpdateWebResource = function (sGuid, sData, fCallback) {
